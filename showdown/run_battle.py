@@ -38,62 +38,29 @@ async def _handle_team_preview(battle: Battle, ps_websocket_client: PSWebsocketC
     await ps_websocket_client.send_message(battle.battle_tag, message)
 
 
-async def get_battle_tag_and_opponent(ps_websocket_client: PSWebsocketClient):
-    while True:
-        msg = await ps_websocket_client.receive_message()
-        split_msg = msg.split('|')
-        first_msg = split_msg[0]
-        if 'battle' in first_msg:
-            battle_tag = first_msg.replace('>', '').strip()
-            user_name = split_msg[-1].replace('☆', '').strip()
-            opponent_name = split_msg[4].replace(user_name, '').replace('vs.', '').strip()
-            return battle_tag, opponent_name
+async def run_start_random_battle(ps_websocket_client: PSWebsocketClient, battle, msg):
+    if not constants.START_STRING in msg:
+        return
+    msg = msg.split(constants.START_STRING)[-1]
+    for line in msg.split('\n'):
+        if battle.opponent.name in line and constants.SWITCH_STRING in line:
+            battle.start_random_battle(battle.user.json, line)
+            continue
+        if battle.started:
+            await update_battle(battle, line)
+
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        best_move = await loop.run_in_executor(
+            pool, find_best_move, battle
+        )
+    formatted_message = await format_decision(battle, best_move)
+    await ps_websocket_client.send_message(battle.battle_tag, formatted_message)
 
 
-async def _initialize_battle_with_tag(ps_websocket_client: PSWebsocketClient):
-    battle_tag, opponent_name = await get_battle_tag_and_opponent(ps_websocket_client)
-    while True:
-        msg = await ps_websocket_client.receive_message()
-        split_msg = msg.split('|')
-        if split_msg[1].strip() == 'request' and split_msg[2].strip():
-            user_json = json.loads(split_msg[2].strip('\''))
-            user_id = user_json[constants.SIDE][constants.ID]
-            opponent_id = constants.ID_LOOKUP[user_id]
-            battle = Battle(battle_tag)
-            battle.opponent.name = opponent_id
-            battle.opponent.account_name = opponent_name
-            return battle, opponent_id, user_json
-
-
-async def _start_random_battle(ps_websocket_client: PSWebsocketClient):
-    battle, opponent_id, user_json = await _initialize_battle_with_tag(ps_websocket_client)
-    battle.battle_type = constants.RANDOM_BATTLE
-    reset_logger(logger, "{}-{}.log".format(battle.opponent.account_name, battle.battle_tag))
-    while True:
-        msg = await ps_websocket_client.receive_message()
-
-        if constants.START_STRING in msg:
-            msg = msg.split(constants.START_STRING)[-1]
-            for line in msg.split('\n'):
-                if opponent_id in line and constants.SWITCH_STRING in line:
-                    battle.start_random_battle(user_json, line)
-                    continue
-
-                if battle.started:
-                    await update_battle(battle, line)
-
-            return battle
-
-
-async def _start_standard_battle(ps_websocket_client: PSWebsocketClient, pokemon_battle_type):
-    battle, opponent_id, user_json = await _initialize_battle_with_tag(ps_websocket_client)
-    battle.battle_type = constants.STANDARD_BATTLE
-    await ps_websocket_client.send_message(battle.battle_tag, [config.greeting_message])
-    reset_logger(logger, "{}-{}.log".format(battle.opponent.account_name, battle.battle_tag))
-
-    msg = ''
-    while constants.START_TEAM_PREVIEW not in msg:
-        msg = await ps_websocket_client.receive_message()
+async def run_start_standard_battle(ps_websocket_client: PSWebsocketClient, battle, msg):
+    if not constants.START_TEAM_PREVIEW in msg:
+        return
 
     preview_string_lines = msg.split(constants.START_TEAM_PREVIEW)[-1].split('\n')
 
@@ -103,13 +70,11 @@ async def _start_standard_battle(ps_websocket_client: PSWebsocketClient, pokemon
             continue
 
         split_line = line.split('|')
-        if split_line[1] == constants.TEAM_PREVIEW_POKE and split_line[2].strip() == opponent_id:
+        if split_line[1] == constants.TEAM_PREVIEW_POKE and split_line[2].strip() == battle.opponent.name:
             opponent_pokemon.append(split_line[3])
 
-    battle.initialize_team_preview(user_json, opponent_pokemon, pokemon_battle_type)
+    battle.initialize_team_preview(battle.user.json, opponent_pokemon, battle.battle_type)
     await _handle_team_preview(battle, ps_websocket_client)
-
-    return battle
 
 
 async def format_decision(battle, decision):
@@ -134,11 +99,42 @@ async def format_decision(battle, decision):
     return [message, str(battle.rqid)]
 
 
-async def pokemon_battle(ps_websocket_client: PSWebsocketClient, pokemon_battle_type):
-    if "random" in pokemon_battle_type:
-        Scoring.POKEMON_ALIVE_STATIC = 30  # random battle benefits from a lower static score for an alive pkmn
-        battle = await _start_random_battle(ps_websocket_client)
-        await ps_websocket_client.send_message(battle.battle_tag, [config.greeting_message])
+async def initialize_battle(ps_websocket_client: PSWebsocketClient, battle, split_msg):
+    if not split_msg[1].strip() == 'request' or not split_msg[2].strip():
+        return
+    user_json = json.loads(split_msg[2].strip('\''))
+    user_id = user_json[constants.SIDE][constants.ID]
+    opponent_id = constants.ID_LOOKUP[user_id]
+    battle.user.json = user_json
+    battle.opponent.name = opponent_id
+
+    random_formats = [
+        'gen7randombattle', 'randomaveragemons', 'randomcamomons', 'randomscalemons', 'randomtiershift',
+        'proteanpalace', 'shiftingillusions', 'voltturnmayhem',
+    ]
+    is_randbat = False
+    for curr in random_formats:
+        if curr in battle.battle_tag:
+            is_randbat = True
+            break
+    if is_randbat:
+        battle.battle_type = constants.RANDOM_BATTLE
+    else:
+        battle.battle_type = constants.STANDARD_BATTLE
+
+    await ps_websocket_client.send_message(battle.battle_tag, [config.greeting_message])
+    await ps_websocket_client.send_message(battle.battle_tag, ['/timer on'])
+
+
+async def pokemon_battle(ps_websocket_client: PSWebsocketClient, battle, msg):
+    if constants.WIN_STRING in msg and constants.CHAT_STRING not in msg:
+        winner = msg.split(constants.WIN_STRING)[-1].split('\n')[0].strip()
+        logger.debug("Winner: {}".format(winner))
+        await ps_websocket_client.send_message(battle.battle_tag, [config.battle_ending_message])
+        await ps_websocket_client.leave_battle(battle.battle_tag, save_replay=config.save_replay)
+        return True
+    action_required = await update_battle(battle, msg)
+    if action_required and not battle.wait:
         loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor() as pool:
             best_move = await loop.run_in_executor(
@@ -146,24 +142,3 @@ async def pokemon_battle(ps_websocket_client: PSWebsocketClient, pokemon_battle_
             )
         formatted_message = await format_decision(battle, best_move)
         await ps_websocket_client.send_message(battle.battle_tag, formatted_message)
-    else:
-        battle = await _start_standard_battle(ps_websocket_client, pokemon_battle_type)
-
-    await ps_websocket_client.send_message(battle.battle_tag, ['/timer on'])
-    while True:
-        msg = await ps_websocket_client.receive_message()
-        if constants.WIN_STRING in msg and constants.CHAT_STRING not in msg:
-            winner = msg.split(constants.WIN_STRING)[-1].split('\n')[0].strip()
-            logger.debug("Winner: {}".format(winner))
-            await ps_websocket_client.send_message(battle.battle_tag, [config.battle_ending_message])
-            await ps_websocket_client.leave_battle(battle.battle_tag, save_replay=config.save_replay)
-            return winner
-        action_required = await update_battle(battle, msg)
-        if action_required and not battle.wait:
-            loop = asyncio.get_event_loop()
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                best_move = await loop.run_in_executor(
-                    pool, find_best_move, battle
-                )
-            formatted_message = await format_decision(battle, best_move)
-            await ps_websocket_client.send_message(battle.battle_tag, formatted_message)

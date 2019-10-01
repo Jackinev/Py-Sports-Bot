@@ -2,18 +2,31 @@ from environs import Env
 import asyncio
 import constants
 import config
+import threading
 from config import logger
 
 from data.mods.apply_mods import apply_mods
 
 from teams import load_team
+from showdown.battle import Battle
 from showdown.run_battle import pokemon_battle
+from showdown.run_battle import initialize_battle
+from showdown.run_battle import run_start_random_battle
+from showdown.run_battle import run_start_standard_battle
 from showdown.websocket_client import PSWebsocketClient
 
 import json
 from data import all_move_json
 from data import pokedex
 from copy import deepcopy
+
+
+def thr(ps_websocket_client, msg, battles):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    loop.run_until_complete(parse_message(ps_websocket_client, msg, battles))
+    loop.close()
 
 
 async def showdown():
@@ -34,7 +47,6 @@ async def showdown():
     bot_mode = env("BOT_MODE")
     team_name = env("TEAM_NAME", None)
     pokemon_mode = env("POKEMON_MODE", constants.DEFAULT_MODE)
-    run_count = int(env("RUN_COUNT", 1))
 
     apply_mods(pokemon_mode)
     original_pokedex = deepcopy(pokedex)
@@ -43,50 +55,61 @@ async def showdown():
     ps_websocket_client = await PSWebsocketClient.create(username, password, websocket_uri)
     await ps_websocket_client.login()
 
-    team = load_team(team_name)
+    battles = []
+    for i in range(5):
+        battles.append(Battle('empty'))
 
-    battles_run = 0
-    wins = 0
-    losses = 0
     while True:
-        if bot_mode == constants.CHALLENGE_USER:
-            user_to_challenge = env("USER_TO_CHALLENGE")
-            await ps_websocket_client.challenge_user(user_to_challenge, pokemon_mode, team)
-        elif bot_mode == constants.ACCEPT_CHALLENGE:
-            await ps_websocket_client.accept_challenge(pokemon_mode, team)
-        elif bot_mode == constants.SEARCH_LADDER:
-            await ps_websocket_client.search_for_match(pokemon_mode, team)
+        msg = await ps_websocket_client.receive_message()
+        loop = asyncio.get_event_loop()
+        t = threading.Thread(target = thr, args=(ps_websocket_client, msg, battles))
+        t.start()
+
+
+async def parse_message(ps_websocket_client, msg, battles):
+    split_msg = msg.split('|')
+
+    if split_msg[1] == 'updatechallenges':
+        await ps_websocket_client.accept_challenge(split_msg, battles)
+        return
+
+    if split_msg[1].strip() == 'init' and split_msg[2].strip() == 'battle':
+        battle = None
+        for curr in battles:
+            if curr.battle_tag == 'pending':
+                battle = curr
+                battle.battle_tag = split_msg[0].replace('>', '').strip()
+                user_name = split_msg[-1].replace('☆', '').strip()
+                battle.opponent.account_name = split_msg[4].replace(user_name, '').replace('vs.', '').strip()
+                battle.opponent.name = 'pending'
+                break
+        if battle == None:
+            logger.debug("ERROR: can't find pending slot")
+        return
+
+    if 'battle' in split_msg[0]:
+        battle = None
+        i = 0
+        for curr in battles:
+            if curr.battle_tag == split_msg[0].replace('>', '').strip():
+                battle = curr
+                break
+            i += 1
+        if battle == None:
+            logger.debug("ERROR: can't find battle slot")
+            return
+        if battle.opponent.name == 'pending':
+            await initialize_battle(ps_websocket_client, battle, split_msg)
+        elif battle.started == False:
+            if battle.battle_type == constants.RANDOM_BATTLE:
+                await run_start_random_battle(ps_websocket_client, battle, msg)
+            else:
+                await run_start_standard_battle(ps_websocket_client, battle, msg)
         else:
-            raise ValueError("Invalid Bot Mode")
+            ended = await pokemon_battle(ps_websocket_client, battle, msg)
+            if(ended):
+                battles[i] = Battle('empty')
 
-        winner = await pokemon_battle(ps_websocket_client, pokemon_mode)
-
-        if winner == username:
-            wins += 1
-        else:
-            losses += 1
-
-        logger.info("\nW: {}\nL: {}\n".format(wins, losses))
-
-        if original_move_json != all_move_json:
-            logger.critical("Move JSON changed!\nDumping modified version to `modified_moves.json`")
-            with open("modified_moves.json", 'w') as f:
-                json.dump(all_move_json, f, indent=4)
-            exit(1)
-        else:
-            logger.debug("Move JSON unmodified!")
-
-        if original_pokedex != pokedex:
-            logger.critical("Pokedex JSON changed!\nDumping modified version to `modified_pokedex.json`")
-            with open("modified_pokedex.json", 'w') as f:
-                json.dump(pokedex, f, indent=4)
-            exit(1)
-        else:
-            logger.debug("Pokedex JSON unmodified!")
-
-        battles_run += 1
-        if battles_run >= run_count:
-            break
 
 
 if __name__ == "__main__":

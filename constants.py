@@ -15,7 +15,7 @@ SCORING_MULTIPLIER = "scoring_multiplier"
 START_STRING = "|start"
 RQID = 'rqid'
 TEAM_PREVIEW_POKE = "poke"
-START_TEAM_PREVIEW = "clearpoke"
+START_TEAM_PREVIEW = "|clearpoke"
 
 MOVES = "moves"
 ABILITIES = "abilities"

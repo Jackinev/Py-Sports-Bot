@@ -118,6 +118,7 @@ class Battler:
         self.trapped = False
 
         self.account_name = None
+        self.json = None
 
     def mega_revealed(self):
         return self.active.is_mega or any(p.is_mega for p in self.reserve)

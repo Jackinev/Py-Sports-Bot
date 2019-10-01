@@ -85,6 +85,9 @@ class PSWebsocketClient:
 
             message = ["/trn " + self.username + ",0," + assertion]
             await self.send_message('', message)
+
+            message = ["/join lobby"]
+            await self.send_message('', message)
         else:
             logger.error("Could not log-in\nDetails:\n{}".format(response.content))
             raise LoginError("Could not log-in")
@@ -102,24 +105,30 @@ class PSWebsocketClient:
         await self.send_message('', message)
         self.last_challenge_time = time.time()
 
-    async def accept_challenge(self, battle_format, team):
-        await self.update_team(team)
+    async def accept_challenge(self, split_msg, battles):
+        random_formats = ["gen7randombattle", "gen7randomscalemons", "gen7randomcamomons", "gen7battlefactory"]
         username = None
-        while username is None:
-            msg = await self.receive_message()
-            split_msg = msg.split('|')
-            if split_msg[1] == 'updatechallenges':
-                try:
-                    challenges = json.loads(split_msg[2])
-                    if challenges['challengesFrom'] is not None:
-                        username, challenge_format = next(iter(challenges['challengesFrom'].items()))
-                        if challenge_format != battle_format:
-                            username = None
-                except ValueError:
+        try:
+            challenges = json.loads(split_msg[2])
+            if challenges['challengesFrom'] is not None:
+                username, challenge_format = next(iter(challenges['challengesFrom'].items()))
+                if challenge_format not in random_formats:
                     username = None
-                except StopIteration:
-                    username = None
+        except ValueError:
+            username = None
+        except StopIteration:
+            username = None
+        if username == None:
+            return
 
+        battle_slot = None
+        for curr in battles:
+            if curr.battle_tag == 'empty':
+                battle_slot = curr
+                battle_slot.battle_tag = 'pending'
+                break
+        if battle_slot == None:
+            return
         message = ["/accept " + username]
         await self.send_message('', message)
 
@@ -134,11 +143,6 @@ class PSWebsocketClient:
 
         message = ["/leave {}".format(battle_tag)]
         await self.send_message('', message)
-
-        while True:
-            msg = await self.receive_message()
-            if battle_tag in msg and 'deinit' in msg:
-                return
 
     async def save_replay(self, battle_tag):
         message = ["/savereplay"]
