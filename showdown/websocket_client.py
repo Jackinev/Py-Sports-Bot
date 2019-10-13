@@ -106,7 +106,12 @@ class PSWebsocketClient:
         self.last_challenge_time = time.time()
 
     async def accept_challenge(self, split_msg, battles):
-        random_formats = ["gen7randombattle", "gen7randomscalemons", "gen7randomcamomons", "gen7battlefactory"]
+        random_formats = [
+            "gen7randombattle", "gen6randombattle", "gen5randombattle", "gen4randombattle",
+            "gen3randombattle", "gen2randombattle", "gen1randombattle", "gen7battlefactory",
+            "gen7ourandombattle", "gen7ubersrandombattle", "gen7uurandombattle", "gen7rurandombattle",
+            "gen7nurandombattle", "gen7purandombattle", "gen7lcrandombattle", "gen7monotyperandombattle",
+            ]
         username = None
         try:
             challenges = json.loads(split_msg[2])

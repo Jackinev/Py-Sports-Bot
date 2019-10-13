@@ -3,6 +3,7 @@ import asyncio
 import constants
 import config
 import threading
+import concurrent.futures
 from config import logger
 
 from data.mods.apply_mods import apply_mods
@@ -61,9 +62,12 @@ async def showdown():
 
     while True:
         msg = await ps_websocket_client.receive_message()
-        loop = asyncio.get_event_loop()
+
+        """ loop = asyncio.get_event_loop()
         t = threading.Thread(target = thr, args=(ps_websocket_client, msg, battles))
-        t.start()
+        t.start() """
+
+        await parse_message(ps_websocket_client, msg, battles)
 
 
 async def parse_message(ps_websocket_client, msg, battles):
@@ -101,10 +105,10 @@ async def parse_message(ps_websocket_client, msg, battles):
         if battle.opponent.name == 'pending':
             await initialize_battle(ps_websocket_client, battle, split_msg)
         elif battle.started == False:
-            if battle.battle_type == constants.RANDOM_BATTLE:
-                await run_start_random_battle(ps_websocket_client, battle, msg)
-            else:
+            if battle.battle_type == constants.STANDARD_BATTLE:
                 await run_start_standard_battle(ps_websocket_client, battle, msg)
+            else:
+                await run_start_random_battle(ps_websocket_client, battle, msg)
         else:
             ended = await pokemon_battle(ps_websocket_client, battle, msg)
             if(ended):

@@ -109,7 +109,7 @@ async def initialize_battle(ps_websocket_client: PSWebsocketClient, battle, spli
     battle.opponent.name = opponent_id
 
     random_formats = [
-        'gen7randombattle', 'randomaveragemons', 'randomcamomons', 'randomscalemons', 'randomtiershift',
+        'randombattle', 'randomaveragemons', 'randomcamomons', 'randomscalemons', 'randomtiershift',
         'proteanpalace', 'shiftingillusions', 'voltturnmayhem',
     ]
     is_randbat = False
@@ -133,6 +133,10 @@ async def pokemon_battle(ps_websocket_client: PSWebsocketClient, battle, msg):
         await ps_websocket_client.send_message(battle.battle_tag, [config.battle_ending_message])
         await ps_websocket_client.leave_battle(battle.battle_tag, save_replay=config.save_replay)
         return True
+    if battle.battle_type == constants.STANDARD_BATTLE:
+        Scoring.POKEMON_ALIVE_STATIC = 75
+    else:
+        Scoring.POKEMON_ALIVE_STATIC = 30
     action_required = await update_battle(battle, msg)
     if action_required and not battle.wait:
         loop = asyncio.get_event_loop()
