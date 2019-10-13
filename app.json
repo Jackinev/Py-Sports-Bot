@@ -32,6 +32,6 @@
       "description": "The type of game this bot will play games in",
       "value": "gen7randombattle",
       "required": true
-    },
+    }
   }
 }
