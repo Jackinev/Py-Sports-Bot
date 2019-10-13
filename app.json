@@ -21,7 +21,7 @@
       "required": false
     },
     "DECISION_METHOD": {
-      "description": "The decision making method. Options are \"safest\" and \"nash\"",
+      "description": "The decision making method. Options are 'safest' and 'nash'",
       "required": false
     },
     "BOT_MODE": {
