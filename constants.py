@@ -17,6 +17,8 @@ RQID = 'rqid'
 TEAM_PREVIEW_POKE = "poke"
 START_TEAM_PREVIEW = "|clearpoke"
 
+COMMAND = "!"
+
 MOVES = "moves"
 ABILITIES = "abilities"
 ITEMS = "items"
@@ -61,6 +63,7 @@ DAMAGE = 'damage'
 HEAL = "heal"
 HEAL_TARGET = "heal_target"
 
+BATTLE_TAG = 'battleTag'
 FORCE_SWITCH = 'forceSwitch'
 WAIT = 'wait'
 TRAPPED = "trapped"

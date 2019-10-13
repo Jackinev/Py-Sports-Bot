@@ -5,7 +5,6 @@
   "env": {
     "WEBSOCKET_URI": {
       "description": "The address to use to connect to the Pokemon Showdown websocket",
-      "value": "sim.smogon.com:8000",
       "required": true
     },
     "PS_USERNAME": {
@@ -13,9 +12,17 @@
       "value": "MyCoolUsername",
       "required": true
     },
-     "PS_PASSWORD": {
+    "PS_PASSWORD": {
       "description": "Pokemon Showdown password",
-       "required": false
+      "required": false
+    },
+    "USE_RELATIVE_WEIGHTS": {
+      "description": "Specifies whether or not to analyze each state and determine how valuable each pokemon is",
+      "required": false
+    },
+    "DECISION_METHOD": {
+      "description": "The decision making method. Options are \"safest\" and \"nash\"",
+      "required": false
     },
     "BOT_MODE": {
       "description": "The mode the the bot will operate in. Options are CHALLENGE_USER, SEARCH_LADDER, or ACCEPT_CHALLENGE",
@@ -26,10 +33,5 @@
       "value": "gen7randombattle",
       "required": true
     },
-    "RUN_COUNT": {
-      "description": "The amount of games this bot will play before quitting",
-      "value": "1",
-      "required": true
-    }
   }
 }

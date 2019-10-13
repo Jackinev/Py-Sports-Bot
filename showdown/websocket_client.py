@@ -107,8 +107,7 @@ class PSWebsocketClient:
 
     async def accept_challenge(self, split_msg, battles):
         random_formats = [
-            "gen7randombattle", "gen6randombattle", "gen5randombattle", "gen4randombattle",
-            "gen3randombattle", "gen2randombattle", "gen1randombattle", "gen7battlefactory",
+            "gen7randombattle", "gen7battlefactory",
             "gen7ourandombattle", "gen7ubersrandombattle", "gen7uurandombattle", "gen7rurandombattle",
             "gen7nurandombattle", "gen7purandombattle", "gen7lcrandombattle", "gen7monotyperandombattle",
             ]
@@ -136,6 +135,7 @@ class PSWebsocketClient:
             return
         message = ["/accept " + username]
         await self.send_message('', message)
+
 
     async def search_for_match(self, battle_format, team):
         await self.update_team(team)

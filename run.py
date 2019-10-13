@@ -73,7 +73,7 @@ async def showdown():
 async def parse_message(ps_websocket_client, msg, battles):
     split_msg = msg.split('|')
 
-    if split_msg[1] == 'updatechallenges':
+    if split_msg[1].strip() == 'updatechallenges':
         await ps_websocket_client.accept_challenge(split_msg, battles)
         return
 
@@ -107,12 +107,19 @@ async def parse_message(ps_websocket_client, msg, battles):
         elif battle.started == False:
             if battle.battle_type == constants.STANDARD_BATTLE:
                 await run_start_standard_battle(ps_websocket_client, battle, msg)
+                return
             else:
                 await run_start_random_battle(ps_websocket_client, battle, msg)
+                return
         else:
             ended = await pokemon_battle(ps_websocket_client, battle, msg)
             if(ended):
                 battles[i] = Battle('empty')
+            return
+
+    if split_msg[1].strip() == 'pm' and '$' in split_msg[4]:
+        await ps_websocket_client.parse_command(split_msg, battles)
+        return
 
 
 
