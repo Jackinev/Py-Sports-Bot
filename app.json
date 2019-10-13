@@ -1,7 +1,7 @@
 {
-  "name": "Showdown bot",
+  "name": "Sports Showdown Bot",
   "description": "A Pokemon Showdown Battle Bot written in Python",
-  "repository": "https://github.com/pmariglia/showdown",
+  "repository": "https://github.com/Jackinev/Py-Sports-Bot",
   "env": {
     "WEBSOCKET_URI": {
       "description": "The address to use to connect to the Pokemon Showdown websocket",
